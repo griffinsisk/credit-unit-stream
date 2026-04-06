@@ -26,19 +26,18 @@ def _is_retryable(exc: BaseException) -> bool:
     stop=stop_after_attempt(3),
     reraise=True,
 )
-def post_billing_drop(
+def post_telemetry(
     api_key: str,
-    connection_id: str,
-    billing_month: str,
-    data: list[dict],
+    metric_name: str,
+    records: list[dict],
 ) -> dict:
-    """POST a billing drop to the CloudZero AnyCost Stream endpoint.
+    """POST unit metric telemetry to the CloudZero /replace endpoint.
 
     Args:
         api_key: CloudZero API key (no Bearer prefix).
-        connection_id: AnyCost Stream connection ID.
-        billing_month: ISO-8601 month string, e.g. "2025-01-01T00:00:00Z".
-        data: List of CBF row dicts.
+        metric_name: Unit metric stream name.
+        records: List of telemetry record dicts with timestamp, value,
+                 granularity, and associated_cost.
 
     Returns:
         Parsed JSON response body.
@@ -47,11 +46,7 @@ def post_billing_drop(
         ValueError: If the payload exceeds the size guard.
         HTTPError: On non-retryable 4xx, or after exhausting retries on 429/5xx.
     """
-    payload = {
-        "month": billing_month,
-        "operation": "replace_drop",
-        "data": data,
-    }
+    payload = {"records": records}
 
     serialised = json.dumps(payload)
     if len(serialised.encode("utf-8")) > _MAX_BODY_BYTES:
@@ -59,18 +54,17 @@ def post_billing_drop(
             f"Payload size {len(serialised)} bytes exceeds limit of {_MAX_BODY_BYTES} bytes"
         )
 
-    url = f"{_BASE_URL}/v2/connections/billing/anycost/{connection_id}/billing_drops"
+    url = f"{_BASE_URL}/unit-cost/v1/telemetry/metric/{metric_name}/replace"
     headers = {
         "Authorization": api_key,
         "Content-Type": "application/json",
     }
 
     logger.info(
-        "posting billing drop",
+        "posting unit metric telemetry",
         extra={
-            "connection_id": connection_id,
-            "billing_month": billing_month,
-            "row_count": len(data),
+            "metric_name": metric_name,
+            "record_count": len(records),
         },
     )
 
@@ -81,13 +75,13 @@ def post_billing_drop(
             extra={
                 "status_code": response.status_code,
                 "body": response.text[:500],
-                "billing_month": billing_month,
+                "metric_name": metric_name,
             },
         )
     response.raise_for_status()
 
     logger.info(
-        "billing drop accepted",
-        extra={"status_code": response.status_code, "billing_month": billing_month},
+        "telemetry accepted",
+        extra={"status_code": response.status_code, "metric_name": metric_name},
     )
     return response.json() if response.content else {}

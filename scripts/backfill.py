@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Backfill historical credits to CloudZero AnyCost Stream.
+"""Backfill historical credits to CloudZero Unit Metric Telemetry.
 
 One-time CLI script that posts credits for multiple billing months.
 Supports two CSV formats:
@@ -27,7 +27,7 @@ Usage:
         --end-month 2026-01 \
         --dry-run
 
-Requires CLOUDZERO_API_KEY and CLOUDZERO_CONNECTION_ID environment variables.
+Requires CLOUDZERO_API_KEY and CLOUDZERO_METRIC_NAME environment variables.
 """
 
 import argparse
@@ -44,7 +44,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import cloudzero_client
 import csv_parser
-from handler import _build_cbf_rows, _last_second_of_month
+from handler import _build_telemetry_records
 
 _ACCOUNT_RE = re.compile(r"^\d{12}$")
 
@@ -136,14 +136,14 @@ def run_backfill(
 ) -> list[dict]:
     """Run the backfill, returning a list of result dicts per month."""
     api_key = os.environ.get("CLOUDZERO_API_KEY", "")
-    connection_id = os.environ.get("CLOUDZERO_CONNECTION_ID", "")
+    metric_name = os.environ.get("CLOUDZERO_METRIC_NAME", "")
 
     if not dry_run:
         if not api_key:
             print("ERROR: CLOUDZERO_API_KEY environment variable not set")
             sys.exit(1)
-        if not connection_id:
-            print("ERROR: CLOUDZERO_CONNECTION_ID environment variable not set")
+        if not metric_name:
+            print("ERROR: CLOUDZERO_METRIC_NAME environment variable not set")
             sys.exit(1)
 
     with open(csv_path, "r") as f:
@@ -181,16 +181,14 @@ def run_backfill(
 
     for i, month_str in enumerate(months, start=1):
         year, month = (int(x) for x in month_str.split("-"))
-        billing_month = f"{year:04d}-{month:02d}-01T00:00:00Z"
-        usage_start = billing_month
-        usage_end = _last_second_of_month(year, month)
+        timestamp = f"{year:04d}-{month:02d}-01T00:00:00Z"
 
         credits = months_data[i - 1]
         # Filter out zero-amount accounts for this month
         nonzero = [c for c in credits if c["amount_usd"] != Decimal("0")]
         total_credit = sum(c["amount_usd"] for c in nonzero)
 
-        cbf_rows = _build_cbf_rows(nonzero, usage_start, usage_end)
+        telemetry_records = _build_telemetry_records(nonzero, timestamp)
 
         if dry_run:
             print(f"[{i}/{len(months)}] {month_str} — {len(nonzero)} accounts, ${total_credit:,.2f} — DRY RUN")
@@ -203,7 +201,7 @@ def run_backfill(
             continue
 
         try:
-            cloudzero_client.post_billing_drop(api_key, connection_id, billing_month, cbf_rows)
+            cloudzero_client.post_telemetry(api_key, metric_name, telemetry_records)
             print(f"[{i}/{len(months)}] {month_str} — {len(nonzero)} accounts, ${total_credit:,.2f} — OK")
             results.append({"month": month_str, "status": "ok"})
         except Exception as exc:
@@ -227,7 +225,7 @@ def run_backfill(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Backfill historical credits to CloudZero AnyCost Stream"
+        description="Backfill historical credits to CloudZero Unit Metric Telemetry"
     )
     parser.add_argument("--csv", required=True, help="Path to credits CSV file")
     parser.add_argument("--start-month", required=True, help="First billing month (YYYY-MM)")

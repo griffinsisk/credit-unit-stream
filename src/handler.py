@@ -1,4 +1,3 @@
-import calendar
 import os
 import re
 from decimal import Decimal
@@ -15,33 +14,26 @@ logger = get_logger(__name__)
 _FILENAME_RE = re.compile(r"credits-(\d{4})-(\d{2})\.csv$")
 
 
-def _last_second_of_month(year: int, month: int) -> str:
-    last_day = calendar.monthrange(year, month)[1]
-    return f"{year:04d}-{month:02d}-{last_day:02d}T23:59:59Z"
-
-
-def _build_cbf_rows(credits: list[dict], usage_start: str, usage_end: str) -> list[dict]:
-    rows = []
+def _build_telemetry_records(credits: list[dict], timestamp: str) -> list[dict]:
+    records = []
     for credit in credits:
         amount = credit["amount_usd"]
-        negated = str(-amount)
-        rows.append(
+        records.append(
             {
-                "lineitem/type": "Credit",
-                "lineitem/description": "Monthly MAP Credit",
-                "time/usage_start": usage_start,
-                "time/usage_end": usage_end,
-                "resource/account": credit["account_id"],
-                "resource/service": "AWSCredits",
-                "cost/cost": negated,
+                "timestamp": timestamp,
+                "value": float(amount),
+                "granularity": "MONTHLY",
+                "associated_cost": {
+                    "accounts": credit["account_id"],
+                },
             }
         )
-    return rows
+    return records
 
 
 def lambda_handler(event: dict, context) -> dict:
     api_key = os.environ["CLOUDZERO_API_KEY"]
-    connection_id = os.environ["CLOUDZERO_CONNECTION_ID"]
+    metric_name = os.environ["CLOUDZERO_METRIC_NAME"]
 
     try:
         record = event["Records"][0]["s3"]
@@ -62,11 +54,9 @@ def lambda_handler(event: dict, context) -> dict:
 
     year = int(match.group(1))
     month = int(match.group(2))
-    billing_month = f"{year:04d}-{month:02d}-01T00:00:00Z"
-    usage_start = billing_month
-    usage_end = _last_second_of_month(year, month)
+    timestamp = f"{year:04d}-{month:02d}-01T00:00:00Z"
 
-    logger.info("processing credits file", extra={"bucket": bucket, "key": key, "billing_month": billing_month})
+    logger.info("processing credits file", extra={"bucket": bucket, "key": key, "billing_month": timestamp})
 
     try:
         s3 = boto3.client("s3")
@@ -86,25 +76,25 @@ def lambda_handler(event: dict, context) -> dict:
         logger.error("no valid rows parsed from CSV", extra={"key": key})
         raise ValueError(f"No valid rows parsed from '{key}'")
 
-    cbf_rows = _build_cbf_rows(credits, usage_start, usage_end)
+    telemetry_records = _build_telemetry_records(credits, timestamp)
 
     total_credit = sum(c["amount_usd"] for c in credits)
     unique_accounts = [c["account_id"] for c in credits]
 
     try:
-        cloudzero_client.post_billing_drop(api_key, connection_id, billing_month, cbf_rows)
+        cloudzero_client.post_telemetry(api_key, metric_name, telemetry_records)
     except (ValueError, HTTPError) as exc:
-        logger.error("billing drop failed", extra={"error": str(exc), "billing_month": billing_month})
+        logger.error("telemetry post failed", extra={"error": str(exc), "billing_month": timestamp})
         raise
     except Exception as exc:
-        logger.error("unexpected error posting billing drop", extra={"error": str(exc)})
+        logger.error("unexpected error posting telemetry", extra={"error": str(exc)})
         raise
 
     logger.info(
         "credits pipeline complete",
         extra={
             "file": key,
-            "billing_month": billing_month,
+            "billing_month": timestamp,
             "row_count": len(credits),
             "unique_accounts": len(unique_accounts),
             "total_credit_usd": str(total_credit),
@@ -113,7 +103,7 @@ def lambda_handler(event: dict, context) -> dict:
 
     return {
         "statusCode": 200,
-        "billing_month": billing_month,
+        "billing_month": timestamp,
         "row_count": len(credits),
         "unique_accounts": len(unique_accounts),
         "total_credit_usd": str(total_credit),

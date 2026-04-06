@@ -1,15 +1,15 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: CloudZero AWS Credits Pipeline — S3 → Lambda → CloudZero AnyCost Stream
+Description: CloudZero AWS Credits Pipeline — S3 → Lambda → CloudZero Unit Metric Telemetry
 
 Parameters:
   CloudZeroApiKey:
     Type: String
     NoEcho: true
     Description: CloudZero API key (no Bearer prefix). Settings > API Keys.
-  CloudZeroConnectionId:
+  CloudZeroMetricName:
     Type: String
-    Description: CloudZero AnyCost Stream connection ID. Settings > Billing Connections.
+    Description: CloudZero unit metric stream name for credit estimates.
 
 Globals:
   Function:
@@ -19,7 +19,7 @@ Globals:
     Environment:
       Variables:
         CLOUDZERO_API_KEY: !Ref CloudZeroApiKey
-        CLOUDZERO_CONNECTION_ID: !Ref CloudZeroConnectionId
+        CLOUDZERO_METRIC_NAME: !Ref CloudZeroMetricName
 
 Resources:
   CreditsBucket:
@@ -38,7 +38,7 @@ Resources:
       FunctionName: aws-credits-processor
       CodeUri: src/
       Handler: handler.lambda_handler
-      Description: Parses monthly credits CSV and posts to CloudZero AnyCost Stream
+      Description: Parses monthly credits CSV and posts to CloudZero Unit Metric Telemetry
       Role: !GetAtt CreditsProcessorRole.Arn
       Events:
         S3CreditsUpload:

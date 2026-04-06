@@ -68,12 +68,12 @@ def make_s3_client_mock(csv_text: str):
 
 def test_happy_path_returns_summary(monkeypatch):
     monkeypatch.setenv("CLOUDZERO_API_KEY", "test-key")
-    monkeypatch.setenv("CLOUDZERO_CONNECTION_ID", "conn-1")
+    monkeypatch.setenv("CLOUDZERO_METRIC_NAME", "map-credit-estimates")
 
     s3_mock = make_s3_client_mock(SAMPLE_CSV)
 
     with patch("handler.boto3.client", return_value=s3_mock), \
-         patch("handler.cloudzero_client.post_billing_drop", return_value={}) as mock_post:
+         patch("handler.cloudzero_client.post_telemetry", return_value={}) as mock_post:
         result = handler.lambda_handler(make_s3_event("credits-2025-01.csv"), None)
 
     assert result["statusCode"] == 200
@@ -89,12 +89,12 @@ def test_happy_path_returns_summary(monkeypatch):
 
 def test_billing_month_from_plain_filename(monkeypatch):
     monkeypatch.setenv("CLOUDZERO_API_KEY", "k")
-    monkeypatch.setenv("CLOUDZERO_CONNECTION_ID", "c")
+    monkeypatch.setenv("CLOUDZERO_METRIC_NAME", "m")
 
     s3_mock = make_s3_client_mock("123456789012,$10.00\n")
 
     with patch("handler.boto3.client", return_value=s3_mock), \
-         patch("handler.cloudzero_client.post_billing_drop", return_value={}):
+         patch("handler.cloudzero_client.post_telemetry", return_value={}):
         result = handler.lambda_handler(make_s3_event("credits-2025-01.csv"), None)
 
     assert result["billing_month"] == "2025-01-01T00:00:00Z"
@@ -102,12 +102,12 @@ def test_billing_month_from_plain_filename(monkeypatch):
 
 def test_billing_month_from_prefixed_key(monkeypatch):
     monkeypatch.setenv("CLOUDZERO_API_KEY", "k")
-    monkeypatch.setenv("CLOUDZERO_CONNECTION_ID", "c")
+    monkeypatch.setenv("CLOUDZERO_METRIC_NAME", "m")
 
     s3_mock = make_s3_client_mock("123456789012,$10.00\n")
 
     with patch("handler.boto3.client", return_value=s3_mock), \
-         patch("handler.cloudzero_client.post_billing_drop", return_value={}):
+         patch("handler.cloudzero_client.post_telemetry", return_value={}):
         result = handler.lambda_handler(make_s3_event("uploads/credits-2025-01.csv"), None)
 
     assert result["billing_month"] == "2025-01-01T00:00:00Z"
@@ -119,7 +119,7 @@ def test_billing_month_from_prefixed_key(monkeypatch):
 
 def test_raises_on_bad_filename(monkeypatch):
     monkeypatch.setenv("CLOUDZERO_API_KEY", "k")
-    monkeypatch.setenv("CLOUDZERO_CONNECTION_ID", "c")
+    monkeypatch.setenv("CLOUDZERO_METRIC_NAME", "m")
 
     s3_mock = make_s3_client_mock("123456789012,$10.00\n")
 
@@ -130,7 +130,7 @@ def test_raises_on_bad_filename(monkeypatch):
 
 def test_raises_on_empty_csv(monkeypatch):
     monkeypatch.setenv("CLOUDZERO_API_KEY", "k")
-    monkeypatch.setenv("CLOUDZERO_CONNECTION_ID", "c")
+    monkeypatch.setenv("CLOUDZERO_METRIC_NAME", "m")
 
     s3_mock = make_s3_client_mock("")
 
@@ -141,7 +141,7 @@ def test_raises_on_empty_csv(monkeypatch):
 
 def test_raises_when_api_call_fails(monkeypatch):
     monkeypatch.setenv("CLOUDZERO_API_KEY", "k")
-    monkeypatch.setenv("CLOUDZERO_CONNECTION_ID", "c")
+    monkeypatch.setenv("CLOUDZERO_METRIC_NAME", "m")
 
     s3_mock = make_s3_client_mock("123456789012,$10.00\n")
 
@@ -151,7 +151,7 @@ def test_raises_when_api_call_fails(monkeypatch):
     api_error = HTTPError(response=mock_response)
 
     with patch("handler.boto3.client", return_value=s3_mock), \
-         patch("handler.cloudzero_client.post_billing_drop", side_effect=api_error):
+         patch("handler.cloudzero_client.post_telemetry", side_effect=api_error):
         with pytest.raises(HTTPError):
             handler.lambda_handler(make_s3_event("credits-2025-01.csv"), None)
 
@@ -162,13 +162,13 @@ def test_raises_when_api_call_fails(monkeypatch):
 
 def test_summary_log_emitted(monkeypatch, caplog):
     monkeypatch.setenv("CLOUDZERO_API_KEY", "k")
-    monkeypatch.setenv("CLOUDZERO_CONNECTION_ID", "c")
+    monkeypatch.setenv("CLOUDZERO_METRIC_NAME", "m")
 
     s3_mock = make_s3_client_mock("123456789012,$50.00\n234567890123,$25.00\n")
 
     with caplog.at_level(logging.INFO, logger="handler"), \
          patch("handler.boto3.client", return_value=s3_mock), \
-         patch("handler.cloudzero_client.post_billing_drop", return_value={}):
+         patch("handler.cloudzero_client.post_telemetry", return_value={}):
         handler.lambda_handler(make_s3_event("credits-2025-03.csv"), None)
 
     messages = [r.message for r in caplog.records]
@@ -176,48 +176,46 @@ def test_summary_log_emitted(monkeypatch, caplog):
 
 
 # ---------------------------------------------------------------------------
-# Usage end — last second of month
+# Telemetry record field values
 # ---------------------------------------------------------------------------
 
-def test_usage_end_is_last_second_of_month(monkeypatch):
+def test_telemetry_records_have_correct_fields(monkeypatch):
     monkeypatch.setenv("CLOUDZERO_API_KEY", "k")
-    monkeypatch.setenv("CLOUDZERO_CONNECTION_ID", "c")
+    monkeypatch.setenv("CLOUDZERO_METRIC_NAME", "m")
 
     s3_mock = make_s3_client_mock("123456789012,$10.00\n")
     captured = {}
 
-    def capture_post(api_key, connection_id, billing_month, data):
-        captured["data"] = data
+    def capture_post(api_key, metric_name, records):
+        captured["records"] = records
         return {}
 
     with patch("handler.boto3.client", return_value=s3_mock), \
-         patch("handler.cloudzero_client.post_billing_drop", side_effect=capture_post):
+         patch("handler.cloudzero_client.post_telemetry", side_effect=capture_post):
         handler.lambda_handler(make_s3_event("credits-2025-01.csv"), None)
 
-    assert captured["data"][0]["time/usage_end"] == "2025-01-31T23:59:59Z"
+    record = captured["records"][0]
+    assert record["timestamp"] == "2025-01-01T00:00:00Z"
+    assert record["value"] == 10.00
+    assert record["granularity"] == "MONTHLY"
+    assert record["associated_cost"] == {"accounts": "123456789012"}
 
 
-# ---------------------------------------------------------------------------
-# CBF row field values
-# ---------------------------------------------------------------------------
-
-def test_cbf_rows_have_map_credit_fields(monkeypatch):
+def test_telemetry_values_are_positive(monkeypatch):
+    """Unit metric values must be positive — sign is handled in Looker table calc."""
     monkeypatch.setenv("CLOUDZERO_API_KEY", "k")
-    monkeypatch.setenv("CLOUDZERO_CONNECTION_ID", "c")
+    monkeypatch.setenv("CLOUDZERO_METRIC_NAME", "m")
 
-    s3_mock = make_s3_client_mock("123456789012,$10.00\n")
+    s3_mock = make_s3_client_mock("123456789012,$10.00\n234567890123,$25.00\n")
     captured = {}
 
-    def capture_post(api_key, connection_id, billing_month, data):
-        captured["data"] = data
+    def capture_post(api_key, metric_name, records):
+        captured["records"] = records
         return {}
 
     with patch("handler.boto3.client", return_value=s3_mock), \
-         patch("handler.cloudzero_client.post_billing_drop", side_effect=capture_post):
+         patch("handler.cloudzero_client.post_telemetry", side_effect=capture_post):
         handler.lambda_handler(make_s3_event("credits-2025-01.csv"), None)
 
-    row = captured["data"][0]
-    assert row["lineitem/type"] == "Credit"
-    assert row["lineitem/description"] == "Monthly MAP Credit"
-    assert row["resource/service"] == "AWSCredits"
-    assert row["cost/cost"] == "-10.00"
+    for record in captured["records"]:
+        assert record["value"] > 0

@@ -114,7 +114,7 @@ def test_dry_run_does_not_call_api(tmp_path):
     csv_file = tmp_path / "credits.csv"
     csv_file.write_text("123456789012,$100.00\n")
 
-    with patch("backfill.cloudzero_client.post_billing_drop") as mock_post:
+    with patch("backfill.cloudzero_client.post_telemetry") as mock_post:
         results = run_backfill(
             csv_path=str(csv_file),
             start_month="2025-01",
@@ -131,7 +131,7 @@ def test_dry_run_multicolumn(tmp_path):
     csv_file = tmp_path / "credits.csv"
     csv_file.write_text("123456789012,$ 10.00,$ 20.00,$ 30.00\n")
 
-    with patch("backfill.cloudzero_client.post_billing_drop") as mock_post:
+    with patch("backfill.cloudzero_client.post_telemetry") as mock_post:
         results = run_backfill(
             csv_path=str(csv_file),
             start_month="2025-01",
@@ -153,18 +153,18 @@ def test_continues_on_failure(tmp_path, monkeypatch):
     csv_file.write_text("123456789012,$100.00\n")
 
     monkeypatch.setenv("CLOUDZERO_API_KEY", "test-key")
-    monkeypatch.setenv("CLOUDZERO_CONNECTION_ID", "test-conn")
+    monkeypatch.setenv("CLOUDZERO_METRIC_NAME", "test-metric")
 
     call_count = 0
 
-    def mock_post(api_key, connection_id, billing_month, data):
+    def mock_post(api_key, metric_name, records):
         nonlocal call_count
         call_count += 1
         if call_count == 2:
             raise Exception("API error on month 2")
         return {}
 
-    with patch("backfill.cloudzero_client.post_billing_drop", side_effect=mock_post), \
+    with patch("backfill.cloudzero_client.post_telemetry", side_effect=mock_post), \
          patch("backfill.time.sleep"):
         results = run_backfill(
             csv_path=str(csv_file),
