@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unit Cost Migration] — 2026-04-08
+
+### Changed
+- **Documentation updated for Unit Cost:** All references to "AnyCost Stream" and
+  `CLOUDZERO_CONNECTION_ID` updated to reflect the actual Unit Metric Telemetry API
+  (`/unit-cost/v1/telemetry/metric/{metric_name}/replace`) and `CLOUDZERO_METRIC_NAME`.
+- Updated README, architecture docs, `.env.example`, `samconfig.toml` comments.
+
 ## [Post-MVP] — 2026-02-20
 
 ### Fixed
@@ -27,7 +35,7 @@
 ### Added
 - `src/csv_parser.py` — Parses headerless credits CSV; handles `$`/comma amounts, leading-zero
   account IDs, duplicates (keep first, warn), bad rows (warn and skip).
-- `src/cloudzero_client.py` — Posts billing drop to CloudZero AnyCost Stream; retries on 429/5xx
+- `src/cloudzero_client.py` — Posts telemetry to CloudZero Unit Metric API; retries on 429/5xx
   (tenacity, 3 attempts, exponential backoff 2–30s); raises immediately on 4xx; 4.5 MB size guard.
 - `src/handler.py` — Lambda entry point; extracts billing month from filename
   (`credits-YYYY-MM.csv`); builds CBF rows with negated amounts; logs structured JSON summary.

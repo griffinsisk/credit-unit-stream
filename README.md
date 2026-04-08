@@ -1,11 +1,11 @@
 # AWS MAP Credits Pipeline
 
-Automates the monthly push of AWS MAP credits into CloudZero. Drop a credits CSV into S3 — Lambda parses it and posts the data to CloudZero's AnyCost Stream billing drop API automatically.
+Automates the monthly push of AWS MAP credits into CloudZero. Drop a credits CSV into S3 — Lambda parses it and posts the data to CloudZero's Unit Metric Telemetry API automatically.
 
 ## How it works
 
 ```
-credits-YYYY-MM.csv  →  S3 bucket  →  Lambda  →  CloudZero AnyCost Stream
+credits-YYYY-MM.csv  →  S3 bucket  →  Lambda  →  CloudZero Unit Metric Telemetry
                                           ↓
                                     CloudWatch Logs
 ```
@@ -67,8 +67,10 @@ You need two values from CloudZero. Open a terminal and run both export commands
 
 ```bash
 export CLOUDZERO_API_KEY=paste_your_api_key_here
-export CLOUDZERO_CONNECTION_ID=paste_your_connection_id_here
+export CLOUDZERO_METRIC_NAME=paste_your_metric_name_here
 ```
+
+> **Where to find these:** API key is under Settings > API Keys. The metric name is the name of the Unit Metric you created in CloudZero (e.g. `map-credit-estimates`).
 
 > **Important:** These exports only last for your current terminal session. If you close the terminal and reopen it, you'll need to run these again before deploying.
 
@@ -76,7 +78,7 @@ To confirm they're set:
 
 ```bash
 echo $CLOUDZERO_API_KEY
-echo $CLOUDZERO_CONNECTION_ID
+echo $CLOUDZERO_METRIC_NAME
 ```
 
 Both should print your values (not blank).
@@ -108,7 +110,7 @@ SAM will walk you through a series of prompts. Here's what to enter:
 | Stack Name | `aws-credits-pipeline` (or press Enter to accept) |
 | AWS Region | Your target region, e.g. `us-east-1` |
 | Parameter CloudZeroApiKey | Paste your API key (text will be invisible — this is normal, see note below) |
-| Parameter CloudZeroConnectionId | Paste your connection ID |
+| Parameter CloudZeroMetricName | Your unit metric stream name (e.g. `map-credit-estimates`) |
 | Confirm changes before deploy | `y` |
 | Allow SAM CLI IAM role creation | `y` |
 | Save arguments to configuration file | `y` |
@@ -137,7 +139,7 @@ After the first deploy, you must pass credentials explicitly via `--parameter-ov
 
 ```bash
 sam deploy \
-  --parameter-overrides "CloudZeroApiKey=$CLOUDZERO_API_KEY CloudZeroConnectionId=$CLOUDZERO_CONNECTION_ID"
+  --parameter-overrides "CloudZeroApiKey=$CLOUDZERO_API_KEY CloudZeroMetricName=$CLOUDZERO_METRIC_NAME"
 ```
 
 This reads the values from your shell environment variables and passes them to CloudFormation.
@@ -183,11 +185,11 @@ The Lambda triggers automatically within a few seconds of the upload.
 
 ### Check CloudZero
 
-Credits should appear in your AnyCost Stream connection for the uploaded billing month within a few minutes.
+Credits should appear in your Unit Metric in CloudZero for the uploaded billing month within a few minutes.
 
 ### Re-uploading the same file is safe
 
-The pipeline uses `replace_drop` — re-uploading the same month replaces the existing data rather than adding duplicates.
+The pipeline uses the `/replace` endpoint — re-uploading the same month replaces the existing data rather than adding duplicates.
 
 ---
 
@@ -234,7 +236,7 @@ Options:
 - `--dry-run` — validate CSV and month range without calling the API
 - `--delay <seconds>` — pause between API calls (default: 2 seconds)
 
-The backfill and the S3 pipeline both use `replace_drop`, so they don't conflict. Re-posting any month via either path safely replaces the data.
+The backfill and the S3 pipeline both use the `/replace` endpoint, so they don't conflict. Re-posting any month via either path safely replaces the data.
 
 ---
 
@@ -265,7 +267,7 @@ pytest tests/ --cov=src --cov-report=term-missing
 ```bash
 sam build
 sam local invoke CreditsProcessorFunction -e events/s3_put_event.json \
-  --env-vars '{"CreditsProcessorFunction": {"CLOUDZERO_API_KEY": "test", "CLOUDZERO_CONNECTION_ID": "test"}}'
+  --env-vars '{"CreditsProcessorFunction": {"CLOUDZERO_API_KEY": "test", "CLOUDZERO_METRIC_NAME": "test"}}'
 ```
 
 ---
@@ -278,7 +280,7 @@ If you previously ran `sam deploy --guided` and it wrote a `parameter_overrides`
 
 ```bash
 sam deploy \
-  --parameter-overrides "CloudZeroApiKey=$CLOUDZERO_API_KEY CloudZeroConnectionId=$CLOUDZERO_CONNECTION_ID"
+  --parameter-overrides "CloudZeroApiKey=$CLOUDZERO_API_KEY CloudZeroMetricName=$CLOUDZERO_METRIC_NAME"
 ```
 
 ### "Unable to locate credentials" or SSO errors

@@ -1,6 +1,6 @@
 # SAM CLI configuration file
 # First deploy:  sam deploy --guided
-# Subsequent:    sam deploy --parameter-overrides "CloudZeroApiKey=$CLOUDZERO_API_KEY CloudZeroConnectionId=$CLOUDZERO_CONNECTION_ID"
+# Subsequent:    sam deploy --parameter-overrides "CloudZeroApiKey=$CLOUDZERO_API_KEY CloudZeroMetricName=$CLOUDZERO_METRIC_NAME"
 
 version = 0.1
 

@@ -13,8 +13,8 @@
                                      ▼                 ▼
                            ┌──────────────────┐  ┌────────────────────┐
                            │  CloudZero API   │  │  CloudWatch Logs   │
-                           │  AnyCost Stream  │  │  (structured JSON) │
-                           │  billing_drops   │  └────────────────────┘
+                           │  Unit Metric     │  │  (structured JSON) │
+                           │  Telemetry       │  └────────────────────┘
                            └──────────────────┘
 ```
 
@@ -32,8 +32,8 @@
 - Triggered by S3 `ObjectCreated` events matching the filter above.
 - Reads the file from S3, parses it, calls CloudZero, logs structured JSON to CloudWatch.
 
-### CloudZero AnyCost Stream (`/v2/connections/billing/anycost/{connection_id}/billing_drops`)
-- Operation: `replace_drop` — replaces all data for the billing month.
+### CloudZero Unit Metric Telemetry (`/unit-cost/v1/telemetry/metric/{metric_name}/replace`)
+- Operation: `replace` — replaces all data for the billing month.
 - Auth: `Authorization: <api_key>` (no Bearer prefix).
 - Idempotent: re-uploading the same file for a month replaces rather than appends.
 
@@ -47,7 +47,7 @@
 |---|---|
 | `handler.py` | Lambda entry point; S3 event parsing; orchestration; summary log |
 | `csv_parser.py` | Pure CSV parsing; duplicate handling; Decimal amounts |
-| `cloudzero_client.py` | HTTP POST to CloudZero; retry on 429/5xx; size guard |
+| `cloudzero_client.py` | HTTP POST to CloudZero Unit Metric Telemetry; retry on 429/5xx; size guard |
 | `logger.py` | Structured JSON logger factory |
 
 ## Data Flow
@@ -55,8 +55,8 @@
 1. File uploaded: `s3://aws-credits-pipeline-{account}-{region}/credits-2025-01.csv`
 2. Lambda triggered; billing month extracted from filename (`credits-YYYY-MM.csv`).
 3. CSV downloaded; parsed into `[{account_id, amount_usd}]` with 23 unique rows.
-4. Each row converted to a CBF row: `cost/cost` negated, `time/usage_end` = last second of month.
-5. Single `POST` with all rows; `replace_drop` ensures idempotency.
+4. Each row converted to a telemetry record: value (positive), granularity MONTHLY, associated_cost with account.
+5. Single `POST` to `/replace` endpoint; ensures idempotency.
 6. Structured summary logged to CloudWatch.
 
 ## Security
