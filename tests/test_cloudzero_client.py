@@ -13,8 +13,7 @@ URL = f"https://api.cloudzero.com/unit-cost/v1/telemetry/metric/{METRIC_NAME}/re
 SAMPLE_RECORDS = [
     {
         "timestamp": "2025-01-01T00:00:00Z",
-        "value": 50.00,
-        "granularity": "MONTHLY",
+        "value": "50.00",
         "associated_cost": {
             "accounts": "123456789012",
         },

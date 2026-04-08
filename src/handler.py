@@ -21,8 +21,7 @@ def _build_telemetry_records(credits: list[dict], timestamp: str) -> list[dict]:
         records.append(
             {
                 "timestamp": timestamp,
-                "value": float(amount),
-                "granularity": "MONTHLY",
+                "value": str(amount),
                 "associated_cost": {
                     "accounts": credit["account_id"],
                 },

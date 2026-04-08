@@ -196,13 +196,13 @@ def test_telemetry_records_have_correct_fields(monkeypatch):
 
     record = captured["records"][0]
     assert record["timestamp"] == "2025-01-01T00:00:00Z"
-    assert record["value"] == 10.00
-    assert record["granularity"] == "MONTHLY"
+    assert record["value"] == "10.00"
+    assert "granularity" not in record
     assert record["associated_cost"] == {"accounts": "123456789012"}
 
 
-def test_telemetry_values_are_positive(monkeypatch):
-    """Unit metric values must be positive — sign is handled in Looker table calc."""
+def test_telemetry_values_are_positive_strings(monkeypatch):
+    """Unit metric values must be positive numeric strings per the API spec."""
     monkeypatch.setenv("CLOUDZERO_API_KEY", "k")
     monkeypatch.setenv("CLOUDZERO_METRIC_NAME", "m")
 
@@ -218,4 +218,5 @@ def test_telemetry_values_are_positive(monkeypatch):
         handler.lambda_handler(make_s3_event("credits-2025-01.csv"), None)
 
     for record in captured["records"]:
-        assert record["value"] > 0
+        assert isinstance(record["value"], str)
+        assert float(record["value"]) > 0
